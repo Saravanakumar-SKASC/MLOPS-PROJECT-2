@@ -1,30 +1,25 @@
-FROM python:3.8-slim
+# Use the Jenkins image as the base image
+FROM jenkins/jenkins:lts
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+# Switch to root user to install dependencies
+USER root
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libatlas-base-dev \
-    libhdf5-dev \
-    libprotobuf-dev \
-    protobuf-compiler \
-    python3-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install prerequisites and Docker
+RUN apt-get update -y && \
+    apt-get install -y apt-transport-https ca-certificates curl gnupg software-properties-common && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - && \
+    echo "deb [arch=amd64] https://download.docker.com/linux/debian bullseye stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update -y && \
+    apt-get install -y docker-ce docker-ce-cli containerd.io && \
+    apt-get clean
 
-WORKDIR /app
+# Add Jenkins user to the Docker group (create if it doesn't exist)
+RUN groupadd -f docker && \
+    usermod -aG docker jenkins
 
-COPY . .
+# Create the Docker directory and volume for DinD
+RUN mkdir -p /var/lib/docker
+VOLUME /var/lib/docker
 
-RUN pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --retries 5 --timeout 30 \
-    --trusted-host pypi.org --trusted-host files.pythonhosted.org \
-    -e .
-
-# Optional: if training is lightweight and needed in the image
-RUN python pipeline/training_pipeline.py
-
-EXPOSE 5000
-
-CMD ["python", "application.py"]
+# Switch back to the Jenkins user
+USER jenkins
